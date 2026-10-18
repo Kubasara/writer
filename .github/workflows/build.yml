@@ -1,0 +1,68 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+
+      - name: 生成安卓工程
+        run: |
+          flutter create --platforms=android --project-name writer ./_bootstrap
+          cp -r _bootstrap/android android
+          rm -rf _bootstrap
+
+      - name: 拉取依赖
+        run: flutter pub get
+
+      - name: 打包 apk
+        run: flutter build apk --release
+
+      - name: 上传 apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: writer-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+
+      - name: 生成 Windows 工程
+        run: |
+          flutter create --platforms=windows --project-name writer ./_bootstrap
+          Copy-Item -Recurse -Force _bootstrap\windows windows
+          Remove-Item -Recurse -Force _bootstrap
+
+      - name: 拉取依赖
+        run: flutter pub get
+
+      - name: 打包 exe
+        run: flutter build windows --release
+
+      - name: 打包成 zip
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath writer-windows.zip
+
+      - name: 上传 exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: writer-windows-exe
+          path: writer-windows.zip
