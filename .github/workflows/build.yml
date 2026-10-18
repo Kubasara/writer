@@ -23,6 +23,9 @@ jobs:
           cp -r _bootstrap/android android
           rm -rf _bootstrap
 
+      - name: 添加联网权限
+        run: sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+
       - name: 拉取依赖
         run: flutter pub get
 
