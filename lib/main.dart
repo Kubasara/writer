@@ -397,11 +397,21 @@ class AppState extends ChangeNotifier {
   bool loaded = false;
   String syncStatus = '未同步';
   Timer? _syncTimer;
+  final List<String> _notices = [];
+  int _lastLevel = 1;
+
+  List<String> takeNotices() {
+    if (_notices.isEmpty) return const <String>[];
+    final copy = List<String>.from(_notices);
+    _notices.clear();
+    return copy;
+  }
 
   Future<void> init() async {
     final local = await LocalStore.load();
     if (local != null) data = local;
     loaded = true;
+    _lastLevel = levelFor(totalWords(data));
     notifyListeners();
     if (data.settings.syncEnabled) {
       await Future.delayed(const Duration(milliseconds: 600));
@@ -446,6 +456,7 @@ class AppState extends ChangeNotifier {
 
   void afterChange() {
     checkAchievements();
+    checkLevelUp();
     LocalStore.save(data);
     notifyListeners();
     if (data.settings.syncEnabled) {
@@ -461,7 +472,16 @@ class AppState extends ChangeNotifier {
     for (final def in kAchievements) {
       if (!data.achievements.containsKey(def.id) && def.condition(data)) {
         data.achievements[def.id] = now;
+        _notices.add('🎉 解锁成就：${def.name}');
       }
+    }
+  }
+
+  void checkLevelUp() {
+    final lv = levelFor(totalWords(data));
+    if (lv > _lastLevel) {
+      _notices.add('🎊 升级到 Lv.$lv「${titleFor(lv)}」！');
+      _lastLevel = lv;
     }
   }
 
@@ -534,7 +554,31 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    AppState.i.addListener(_onStateChanged);
     AppState.i.init();
+  }
+
+  @override
+  void dispose() {
+    AppState.i.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  void _onStateChanged() {
+    final notices = AppState.i.takeNotices();
+    if (notices.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final n in notices) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(n),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -565,7 +609,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
           body: IndexedStack(
             index: _tab,
-            children: const [TodayPage(), StatsPage(), AchievementsPage()],
+            children: [TodayPage(), StatsPage(), AchievementsPage()],
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
@@ -676,21 +720,11 @@ class _TodayPageState extends State<TodayPage> {
     );
     if (result != null && result > 0) {
       AppState.i.addSession(minutes, result);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已记录 $result 字，+$result 经验 🎉')),
-        );
-      }
     }
   }
 
   void _quickAdd(int n) {
     AppState.i.addWords(n);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('+$n 字，继续加油！')),
-      );
-    }
   }
 
   void _manualAdd() {
